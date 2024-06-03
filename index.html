@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treemap Diagram</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        #treemap {
+            margin: 20px auto;
+        }
+
+        .tile {
+            stroke: white;
+        }
+
+        .legend-item {
+            display: inline-block;
+            margin: 0 10px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        #tooltip {
+            position: absolute;
+            background-color: #f4f4f4;
+            border: 1px solid #ddd;
+            padding: 10px;
+            display: none;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            border-radius: 20px 0 20px 0;
+            font-weight: 700;
+            background-color: #1b337f;
+            color: white;
+            font-size: 16px;
+            margin: 10px;
+            border: none;
+        }
+
+        button:hover {
+            background-color: #00ccff;
+            color: #1b337f;
+        }
+
+        .clicked {
+            background-color: #00ccff;
+            color: #1b337f;
+            border: 3px solid #1b337f;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 id="title">Treemap Diagram</h1>
+    <div>
+        <button onclick="showKickstarter()">Kickstarter Pledges</button>
+        <button onclick="showMovieSales()">Movie Sales</button>
+        <button onclick="showVideoGameSales()">Video Game Sales</button>
+    </div>
+    <div id="description">Choose a dataset to visualize as a treemap diagram.</div>
+    <svg id="treemap"></svg>
+    <div id="legend"></div>
+    <div id="tooltip"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.js"></script>
+    <script>
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            button.addEventListener('click', function () {
+                // Xóa tất cả các lớp CSS của button
+                buttons.forEach(btn => btn.classList.remove('clicked'));
+
+                // Thêm lớp CSS cho button hiện tại
+                this.classList.add('clicked');
+            });
+        });
+
+
+        function showKickstarter() {
+            fetchDataAndCreateTreemap('https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/kickstarter-funding-data.json', 'Kickstarter Pledges');
+        }
+
+        function showMovieSales() {
+            fetchDataAndCreateTreemap('https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/movie-data.json', 'Movie Sales');
+        }
+
+        function showVideoGameSales() {
+            fetchDataAndCreateTreemap('https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/video-game-sales-data.json', 'Video Game Sales');
+        }
+
+        function fetchDataAndCreateTreemap(url, title) {
+            d3.json(url)
+                .then(data => {
+                    document.getElementById('description').textContent = `Treemap diagram for ${title}.`;
+
+                    const width = 1200;
+                    const height = 600;
+
+                    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+                    const root = d3.hierarchy(data)
+                        .eachBefore(d => { d.data.id = (d.parent ? d.parent.data.id + '.' : '') + d.data.name; })
+                        .sum(d => d.value)
+                        .sort((a, b) => b.value - a.value);
+
+                    d3.treemap()
+                        .size([width, height])
+                        .paddingInner(1)
+                        (root);
+
+                    const svg = d3.select('#treemap')
+                        .attr('width', width)
+                        .attr('height', height);
+
+                    svg.selectAll('*').remove(); // Clear previous contents
+
+                    const tile = svg.selectAll('g')
+                        .data(root.leaves())
+                        .enter().append('g')
+                        .attr('transform', d => `translate(${d.x0},${d.y0})`);
+
+                    tile.append('rect')
+                        .attr('class', 'tile')
+                        .attr('data-name', d => d.data.name)
+                        .attr('data-category', d => d.data.category)
+                        .attr('data-value', d => d.data.value)
+                        .attr('width', d => d.x1 - d.x0)
+                        .attr('height', d => d.y1 - d.y0)
+                        .attr('fill', d => color(d.data.category))
+                        .on('mousemove', function (event, d) {
+                            const tooltip = d3.select('#tooltip');
+                            tooltip.style('display', 'block')
+                                .style('left', `${event.pageX + 10}px`)
+                                .style('top', `${event.pageY - 28}px`)
+                                .attr('data-value', d.data.value)
+                                .html(`
+                                    <strong>${d.data.name}</strong><br>
+                                    Category: ${d.data.category}<br>
+                                    Value: ${d.data.value}
+                                `);
+                        })
+                        .on('mouseout', function () {
+                            d3.select('#tooltip').style('display', 'none');
+                        });
+
+                    tile.append('text')
+                        .attr('class', 'tile-text')
+                        .selectAll('tspan')
+                        .data(d => d.data.name.split(/(?=[A-Z][^A-Z])/g))
+                        .enter().append('tspan')
+                        .attr('x', 4)
+                        .attr('y', (d, i) => 13 + i * 10)
+                        .text(d => d);
+
+                    const categories = root.leaves().map(d => d.data.category)
+                        .filter((category, index, self) => self.indexOf(category) === index);
+
+                    const legend = d3.select('#legend');
+
+                    legend.selectAll('*').remove(); // Clear previous contents
+
+                    const legendItems = legend.selectAll('.legend-item')
+                        .data(categories)
+                        .enter().append('div')
+                        .attr('class', 'legend-item');
+
+                    legendItems.append('div')
+                        .attr('class', 'legend-color')
+                        .style('background-color', d => color(d));
+
+                    legendItems.append('div')
+                        .attr('class', 'legend-text')
+                        .text(d => d);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+    </script>
+</body>
+
+</html>
